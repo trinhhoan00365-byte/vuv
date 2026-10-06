@@ -1,352 +1,218 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
-# ==========================================
-#       FAST VIDEO CUTTER - TERMUX
-#       KHÔNG ENCODE - CẮT SIÊU NHANH
-# ==========================================
+INPUT_DIR="/sdcard/Download"
+OUTPUT_DIR="/sdcard/Download/Video Ratio"
+
+mkdir -p "$OUTPUT_DIR"
 
 clear
 
+echo "╔════════════════════════════════╗"
+echo "║        VIDEO RATIO TOOL        ║"
+echo "╚════════════════════════════════╝"
+echo
+
 # Kiểm tra FFmpeg
 if ! command -v ffmpeg >/dev/null 2>&1; then
-    echo "❌ Chưa tìm thấy FFmpeg."
-    echo
-    echo "Cài FFmpeg bằng:"
-    echo
-    echo "pkg install ffmpeg -y"
-    echo
+    echo "❌ Chưa cài FFmpeg."
+    echo "Hãy chạy: pkg install ffmpeg -y"
     exit 1
 fi
 
-# Kiểm tra bộ nhớ
-if [ ! -d "$HOME/storage/shared" ]; then
-    echo "📱 Termux chưa được cấp quyền bộ nhớ."
-    echo
-    echo "Chạy:"
-    echo "termux-setup-storage"
-    echo
-    read -r -p "Nhấn Enter sau khi cấp quyền..."
-fi
+# Liệt kê video
+echo "📁 Video trong Download:"
+echo
 
-# Thư mục Download
-DOWNLOAD_DIR="$HOME/storage/downloads"
+files=()
 
-if [ ! -d "$DOWNLOAD_DIR" ]; then
-    echo "❌ Không tìm thấy thư mục Download."
-    echo
-    echo "Hãy chạy:"
-    echo "termux-setup-storage"
-    exit 1
-fi
-
-# Thư mục chứa video đã cắt
-OUTPUT_DIR="$DOWNLOAD_DIR/video cut"
-
-# Tự tạo thư mục
-mkdir -p "$OUTPUT_DIR"
-
-# Đi vào Download
-cd "$DOWNLOAD_DIR" || exit 1
-
-# Tìm video trực tiếp trong Download
-mapfile -d '' VIDEOS < <(
-    find . -maxdepth 1 -type f \
-    \( \
-        -iname "*.mp4" \
-        -o -iname "*.mkv" \
-        -o -iname "*.mov" \
-        -o -iname "*.webm" \
-        -o -iname "*.avi" \
-        -o -iname "*.m4v" \
-        -o -iname "*.flv" \
-    \) \
-    -print0 | sort -z
-)
-
-if [ "${#VIDEOS[@]}" -eq 0 ]; then
-    clear
-    echo "=========================================="
-    echo "       🎬 FAST VIDEO CUTTER"
-    echo "=========================================="
-    echo
-    echo "❌ Không tìm thấy video trong Download."
-    echo
-    exit 1
-fi
-
-
-# ==========================================
-# CHUYỂN THỜI GIAN → GIÂY
-# Đã sửa lỗi 08, 09 bị Bash hiểu là OCTAL
-# ==========================================
-
-time_to_seconds() {
-
-    local TIME="$1"
-
-    # HH:MM:SS
-    if [[ "$TIME" =~ ^([0-9]+):([0-9]{2}):([0-9]{2})$ ]]; then
-
-        local H="${BASH_REMATCH[1]}"
-        local M="${BASH_REMATCH[2]}"
-        local S="${BASH_REMATCH[3]}"
-
-        echo $((10#$H * 3600 + 10#$M * 60 + 10#$S))
-
-        return
+for file in "$INPUT_DIR"/*; do
+    if [ -f "$file" ]; then
+        case "${file,,}" in
+            *.mp4|*.mkv|*.mov|*.avi|*.webm|*.m4v)
+                files+=("$file")
+                ;;
+        esac
     fi
-
-    # MM:SS
-    if [[ "$TIME" =~ ^([0-9]+):([0-9]{2})$ ]]; then
-
-        local M="${BASH_REMATCH[1]}"
-        local S="${BASH_REMATCH[2]}"
-
-        echo $((10#$M * 60 + 10#$S))
-
-        return
-    fi
-
-    # Chỉ nhập số giây
-    if [[ "$TIME" =~ ^[0-9]+$ ]]; then
-
-        echo $((10#$TIME))
-
-        return
-    fi
-
-    echo "-1"
-}
-
-
-# ==========================================
-# GIÂY → HH:MM:SS
-# ==========================================
-
-seconds_to_time() {
-
-    local TOTAL="$1"
-
-    local H=$((TOTAL / 3600))
-    local M=$(((TOTAL % 3600) / 60))
-    local S=$((TOTAL % 60))
-
-    printf "%02d:%02d:%02d" "$H" "$M" "$S"
-}
-
-
-# ==========================================
-# MENU
-# ==========================================
-
-while true
-do
-
-    clear
-
-    echo "=========================================="
-    echo "       🎬 FAST VIDEO CUTTER"
-    echo "=========================================="
-    echo
-    echo "⚡ KHÔNG ENCODE"
-    echo "⚡ CẮT RẤT NHANH"
-    echo
-    echo "📁 Video:"
-    echo "$DOWNLOAD_DIR"
-    echo
-    echo "💾 File cắt:"
-    echo "$OUTPUT_DIR"
-    echo
-    echo "🎞 DANH SÁCH VIDEO"
-    echo "------------------------------------------"
-
-    for i in "${!VIDEOS[@]}"
-    do
-
-        filename="${VIDEOS[$i]#./}"
-
-        printf "  %2d. %s\n" \
-            "$((i+1))" \
-            "$filename"
-
-    done
-
-    echo "------------------------------------------"
-    echo "   0. Thoát"
-    echo
-
-    read -r -p "👉 Chọn video: " CHOICE
-
-    # Thoát
-    if [[ "$CHOICE" == "0" ]]; then
-        echo
-        echo "👋 Đã thoát."
-        exit 0
-    fi
-
-    # Kiểm tra lựa chọn
-    if ! [[ "$CHOICE" =~ ^[0-9]+$ ]] ||
-       [ "$CHOICE" -lt 1 ] ||
-       [ "$CHOICE" -gt "${#VIDEOS[@]}" ]
-    then
-
-        echo
-        echo "❌ Lựa chọn không hợp lệ."
-        sleep 2
-        continue
-    fi
-
-    # Video được chọn
-    INPUT="${VIDEOS[$((CHOICE-1))]}"
-
-    BASENAME="$(basename "$INPUT")"
-    NAME="${BASENAME%.*}"
-    EXT="${BASENAME##*.}"
-
-    clear
-
-    echo "=========================================="
-    echo "          ⚡ CẮT SIÊU NHANH"
-    echo "=========================================="
-    echo
-    echo "🎞 Video:"
-    echo "$BASENAME"
-    echo
-    echo "⚠️ Không encode."
-    echo "⚠️ Có thể lệch vài giây do keyframe."
-    echo
-    echo "Ví dụ:"
-    echo "05:00"
-    echo "08:30"
-    echo
-
-    # Nhập thời gian
-    read -r -p "▶️  Thời gian bắt đầu: " START
-
-    read -r -p "⏹ Thời gian kết thúc:  " END
-
-    # Chuyển sang giây
-    START_SEC=$(time_to_seconds "$START")
-    END_SEC=$(time_to_seconds "$END")
-
-    # Kiểm tra
-    if [ "$START_SEC" -lt 0 ] ||
-       [ "$END_SEC" -lt 0 ]
-    then
-
-        echo
-        echo "❌ Định dạng thời gian không hợp lệ."
-        sleep 3
-        continue
-    fi
-
-    # Kiểm tra thứ tự
-    if [ "$END_SEC" -le "$START_SEC" ]; then
-
-        echo
-        echo "❌ Thời gian kết thúc phải lớn hơn thời gian bắt đầu."
-        sleep 3
-        continue
-    fi
-
-    # Tính thời lượng
-    DURATION_SEC=$((END_SEC - START_SEC))
-
-    DURATION=$(seconds_to_time "$DURATION_SEC")
-
-    # Tên file
-    START_SAFE="${START//:/-}"
-    END_SAFE="${END//:/-}"
-
-    OUTPUT="$OUTPUT_DIR/${NAME}_cut_${START_SAFE}_to_${END_SAFE}.${EXT}"
-
-    # Nếu file đã tồn tại
-    COUNT=1
-
-    while [ -e "$OUTPUT" ]
-    do
-
-        OUTPUT="$OUTPUT_DIR/${NAME}_cut_${START_SAFE}_to_${END_SAFE}_${COUNT}.${EXT}"
-
-        COUNT=$((COUNT+1))
-
-    done
-
-    # Hiển thị
-    clear
-
-    echo "=========================================="
-    echo "          ⚡ CẮT SIÊU NHANH"
-    echo "=========================================="
-    echo
-    echo "🎞 Video:"
-    echo "$BASENAME"
-    echo
-    echo "▶️  Bắt đầu:"
-    echo "$START"
-    echo
-    echo "⏹ Kết thúc:"
-    echo "$END"
-    echo
-    echo "⏱ Thời lượng:"
-    echo "$DURATION"
-    echo
-    echo "💾 File xuất:"
-    echo "$(basename "$OUTPUT")"
-    echo
-    echo "📁 Thư mục:"
-    echo "$OUTPUT_DIR"
-    echo
-    echo "=========================================="
-    echo "⚡ ĐANG CẮT..."
-    echo "=========================================="
-    echo
-
-    # ======================================
-    # CẮT KHÔNG ENCODE
-    # ======================================
-
-    ffmpeg \
-        -hide_banner \
-        -loglevel warning \
-        -ss "$START" \
-        -i "$INPUT" \
-        -t "$DURATION" \
-        -map 0 \
-        -c copy \
-        -avoid_negative_ts make_zero \
-        "$OUTPUT"
-
-    STATUS=$?
-
-    echo
-    echo "=========================================="
-
-    if [ "$STATUS" -eq 0 ] &&
-       [ -f "$OUTPUT" ]
-    then
-
-        echo "✅ CẮT THÀNH CÔNG!"
-        echo
-        echo "📁 File đã lưu:"
-        echo "$OUTPUT"
-        echo
-        echo "⚡ Không encode."
-        echo "⚡ Video gốc vẫn nguyên."
-        echo
-        echo "📂 Download/video cut"
-
-    else
-
-        echo "❌ CẮT VIDEO THẤT BẠI."
-
-        rm -f "$OUTPUT" 2>/dev/null
-
-    fi
-
-    echo "=========================================="
-    echo
-
-    read -r -p "Nhấn Enter để quay lại danh sách..."
-
 done
+
+if [ ${#files[@]} -eq 0 ]; then
+    echo "❌ Không tìm thấy video trong Download."
+    exit 1
+fi
+
+for i in "${!files[@]}"; do
+    echo "$((i+1)). $(basename "${files[$i]}")"
+done
+
+echo
+read -p "👉 Chọn video: " choice
+
+if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt ${#files[@]} ]; then
+    echo "❌ Lựa chọn không hợp lệ."
+    exit 1
+fi
+
+INPUT="${files[$((choice-1))]}"
+BASENAME=$(basename "$INPUT")
+NAME="${BASENAME%.*}"
+
+echo
+echo "════════════════════════════════"
+echo "Chọn tỷ lệ video"
+echo "════════════════════════════════"
+echo
+echo "1. 16:9"
+echo "2. 9:16"
+echo "3. 4:3"
+echo "4. 3:4"
+echo "5. 1:1"
+echo "6. 2:3"
+echo "7. 3:2"
+echo "8. 5:7"
+echo "9. 7:5"
+echo "10. Tự nhập"
+echo
+
+read -p "👉 Lựa chọn: " ratio_choice
+
+case "$ratio_choice" in
+    1) RATIO="16:9" ;;
+    2) RATIO="9:16" ;;
+    3) RATIO="4:3" ;;
+    4) RATIO="3:4" ;;
+    5) RATIO="1:1" ;;
+    6) RATIO="2:3" ;;
+    7) RATIO="3:2" ;;
+    8) RATIO="5:7" ;;
+    9) RATIO="7:5" ;;
+    10)
+        echo
+        read -p "👉 Nhập tỷ lệ, ví dụ 2:3: " RATIO
+        ;;
+    *)
+        echo "❌ Lựa chọn không hợp lệ."
+        exit 1
+        ;;
+esac
+
+# Kiểm tra tỷ lệ
+if ! [[ "$RATIO" =~ ^[0-9]+:[0-9]+$ ]]; then
+    echo "❌ Tỷ lệ không hợp lệ."
+    exit 1
+fi
+
+W_RATIO="${RATIO%%:*}"
+H_RATIO="${RATIO##*:}"
+
+if [ "$W_RATIO" -eq 0 ] || [ "$H_RATIO" -eq 0 ]; then
+    echo "❌ Tỷ lệ không hợp lệ."
+    exit 1
+fi
+
+echo
+echo "════════════════════════════════"
+echo "⚙️ Chế độ xử lý"
+echo "════════════════════════════════"
+echo
+echo "Video sẽ được giữ nguyên toàn bộ."
+echo "Phần thừa sẽ được thêm nền đen."
+echo
+echo "Không crop."
+echo "Không kéo giãn."
+echo
+
+# Lấy kích thước video
+WIDTH=$(ffprobe -v error \
+    -select_streams v:0 \
+    -show_entries stream=width \
+    -of csv=p=0 "$INPUT")
+
+HEIGHT=$(ffprobe -v error \
+    -select_streams v:0 \
+    -show_entries stream=height \
+    -of csv=p=0 "$INPUT")
+
+if [ -z "$WIDTH" ] || [ -z "$HEIGHT" ]; then
+    echo "❌ Không đọc được kích thước video."
+    exit 1
+fi
+
+echo "📐 Video gốc: ${WIDTH}x${HEIGHT}"
+echo "🎞️ Tỷ lệ mới: $RATIO"
+echo
+
+# Tính canvas mới.
+# Giữ video lớn nhất có thể nhưng không crop.
+TARGET_W="$WIDTH"
+TARGET_H="$HEIGHT"
+
+# So sánh WIDTH/HEIGHT với W_RATIO/H_RATIO
+# Dùng số nguyên để tránh cần bc.
+
+LEFT=$((WIDTH * H_RATIO))
+RIGHT=$((HEIGHT * W_RATIO))
+
+if [ "$LEFT" -gt "$RIGHT" ]; then
+    # Video rộng hơn tỷ lệ đích
+    # Giữ chiều rộng, tăng chiều cao
+    TARGET_H=$((WIDTH * H_RATIO / W_RATIO))
+else
+    # Video cao hơn tỷ lệ đích
+    # Giữ chiều cao, tăng chiều rộng
+    TARGET_W=$((HEIGHT * W_RATIO / H_RATIO))
+fi
+
+# Đảm bảo kích thước là số chẵn
+TARGET_W=$((TARGET_W / 2 * 2))
+TARGET_H=$((TARGET_H / 2 * 2))
+
+echo "🖼️ Canvas mới: ${TARGET_W}x${TARGET_H}"
+echo
+
+OUTPUT="$OUTPUT_DIR/${NAME}_${W_RATIO}x${H_RATIO}.mp4"
+
+echo "🚀 Đang xử lý..."
+echo
+echo "📂 File xuất:"
+echo "$OUTPUT"
+echo
+
+ffmpeg \
+-hide_banner \
+-i "$INPUT" \
+-map 0:v:0 \
+-map 0:a? \
+-vf "scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease,pad=${TARGET_W}:${TARGET_H}:(ow-iw)/2:(oh-ih)/2:black" \
+-c:v libx264 \
+-preset veryfast \
+-crf 23 \
+-pix_fmt yuv420p \
+-c:a aac \
+-b:a 128k \
+-movflags +faststart \
+-progress pipe:1 \
+-n "$OUTPUT" 2>/dev/null |
+while IFS='=' read -r key value; do
+    if [ "$key" = "out_time_ms" ]; then
+        printf "\r⏳ Đang xuất: %s giây" "$((value / 1000000))"
+    fi
+
+    if [ "$key" = "progress" ] && [ "$value" = "end" ]; then
+        echo
+    fi
+done
+
+if [ $? -eq 0 ] && [ -f "$OUTPUT" ]; then
+    echo
+    echo "╔════════════════════════════════╗"
+    echo "║        ✅ HOÀN THÀNH          ║"
+    echo "╚════════════════════════════════╝"
+    echo
+    echo "📁 File nằm tại:"
+    echo "$OUTPUT"
+    echo
+else
+    echo
+    echo "❌ Có lỗi khi xuất video."
+    exit 1
+fi
