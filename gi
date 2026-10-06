@@ -1,5 +1,11 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
+# ==========================================
+#          VIDEO RATIO TOOL
+#     Không crop - Không upscale
+#     Thêm nền đen - Giữ chất lượng cao
+# ==========================================
+
 INPUT_DIR="/sdcard/Download"
 OUTPUT_DIR="/sdcard/Download/Video Ratio"
 
@@ -7,59 +13,97 @@ mkdir -p "$OUTPUT_DIR"
 
 clear
 
-echo "╔════════════════════════════════╗"
-echo "║        VIDEO RATIO TOOL        ║"
-echo "╚════════════════════════════════╝"
+echo "╔════════════════════════════════════╗"
+echo "║         VIDEO RATIO TOOL           ║"
+echo "╠════════════════════════════════════╣"
+echo "║  Không crop                        ║"
+echo "║  Không upscale                     ║"
+echo "║  Không kéo giãn                    ║"
+echo "║  Thêm nền đen                      ║"
+echo "╚════════════════════════════════════╝"
 echo
 
+# ==========================================
 # Kiểm tra FFmpeg
+# ==========================================
+
 if ! command -v ffmpeg >/dev/null 2>&1; then
     echo "❌ Chưa cài FFmpeg."
-    echo "Hãy chạy: pkg install ffmpeg -y"
+    echo
+    echo "Chạy:"
+    echo "pkg install ffmpeg -y"
     exit 1
 fi
 
-# Liệt kê video
-echo "📁 Video trong Download:"
-echo
+if ! command -v ffprobe >/dev/null 2>&1; then
+    echo "❌ Không tìm thấy ffprobe."
+    exit 1
+fi
+
+# ==========================================
+# Tìm video
+# ==========================================
 
 files=()
 
 for file in "$INPUT_DIR"/*; do
     if [ -f "$file" ]; then
+
         case "${file,,}" in
             *.mp4|*.mkv|*.mov|*.avi|*.webm|*.m4v)
                 files+=("$file")
                 ;;
         esac
+
     fi
 done
 
 if [ ${#files[@]} -eq 0 ]; then
-    echo "❌ Không tìm thấy video trong Download."
+    echo "❌ Không tìm thấy video trong:"
+    echo "$INPUT_DIR"
     exit 1
 fi
+
+echo "📁 VIDEO TRONG DOWNLOAD"
+echo "────────────────────────────────────"
+echo
 
 for i in "${!files[@]}"; do
     echo "$((i+1)). $(basename "${files[$i]}")"
 done
 
 echo
-read -p "👉 Chọn video: " choice
+echo "────────────────────────────────────"
 
-if ! [[ "$choice" =~ ^[0-9]+$ ]] || [ "$choice" -lt 1 ] || [ "$choice" -gt ${#files[@]} ]; then
+read -p "👉 Chọn video: " CHOICE
+
+if ! [[ "$CHOICE" =~ ^[0-9]+$ ]]; then
+    echo "❌ Vui lòng nhập số."
+    exit 1
+fi
+
+if [ "$CHOICE" -lt 1 ] || [ "$CHOICE" -gt "${#files[@]}" ]; then
     echo "❌ Lựa chọn không hợp lệ."
     exit 1
 fi
 
-INPUT="${files[$((choice-1))]}"
+INPUT="${files[$((CHOICE-1))]}"
+
 BASENAME=$(basename "$INPUT")
 NAME="${BASENAME%.*}"
 
 echo
-echo "════════════════════════════════"
-echo "Chọn tỷ lệ video"
-echo "════════════════════════════════"
+echo "🎬 Video:"
+echo "$BASENAME"
+
+# ==========================================
+# Chọn tỷ lệ
+# ==========================================
+
+echo
+echo "════════════════════════════════════"
+echo "           CHỌN TỶ LỆ"
+echo "════════════════════════════════════"
 echo
 echo "1. 16:9"
 echo "2. 9:16"
@@ -73,146 +117,303 @@ echo "9. 7:5"
 echo "10. Tự nhập"
 echo
 
-read -p "👉 Lựa chọn: " ratio_choice
+read -p "👉 Lựa chọn: " RATIO_CHOICE
 
-case "$ratio_choice" in
-    1) RATIO="16:9" ;;
-    2) RATIO="9:16" ;;
-    3) RATIO="4:3" ;;
-    4) RATIO="3:4" ;;
-    5) RATIO="1:1" ;;
-    6) RATIO="2:3" ;;
-    7) RATIO="3:2" ;;
-    8) RATIO="5:7" ;;
-    9) RATIO="7:5" ;;
-    10)
-        echo
-        read -p "👉 Nhập tỷ lệ, ví dụ 2:3: " RATIO
+case "$RATIO_CHOICE" in
+
+    1)
+        RATIO_W=16
+        RATIO_H=9
+        RATIO_NAME="16x9"
         ;;
+
+    2)
+        RATIO_W=9
+        RATIO_H=16
+        RATIO_NAME="9x16"
+        ;;
+
+    3)
+        RATIO_W=4
+        RATIO_H=3
+        RATIO_NAME="4x3"
+        ;;
+
+    4)
+        RATIO_W=3
+        RATIO_H=4
+        RATIO_NAME="3x4"
+        ;;
+
+    5)
+        RATIO_W=1
+        RATIO_H=1
+        RATIO_NAME="1x1"
+        ;;
+
+    6)
+        RATIO_W=2
+        RATIO_H=3
+        RATIO_NAME="2x3"
+        ;;
+
+    7)
+        RATIO_W=3
+        RATIO_H=2
+        RATIO_NAME="3x2"
+        ;;
+
+    8)
+        RATIO_W=5
+        RATIO_H=7
+        RATIO_NAME="5x7"
+        ;;
+
+    9)
+        RATIO_W=7
+        RATIO_H=5
+        RATIO_NAME="7x5"
+        ;;
+
+    10)
+
+        echo
+        read -p "👉 Nhập tỷ lệ (ví dụ 2:3): " CUSTOM_RATIO
+
+        if [[ ! "$CUSTOM_RATIO" =~ ^[0-9]+:[0-9]+$ ]]; then
+            echo "❌ Tỷ lệ không hợp lệ."
+            echo "Ví dụ đúng: 2:3"
+            exit 1
+        fi
+
+        RATIO_W="${CUSTOM_RATIO%%:*}"
+        RATIO_H="${CUSTOM_RATIO##*:}"
+
+        RATIO_NAME="${RATIO_W}x${RATIO_H}"
+
+        ;;
+
     *)
+
         echo "❌ Lựa chọn không hợp lệ."
         exit 1
         ;;
+
 esac
 
+# ==========================================
 # Kiểm tra tỷ lệ
-if ! [[ "$RATIO" =~ ^[0-9]+:[0-9]+$ ]]; then
+# ==========================================
+
+if [ "$RATIO_W" -le 0 ] || [ "$RATIO_H" -le 0 ]; then
     echo "❌ Tỷ lệ không hợp lệ."
     exit 1
 fi
 
-W_RATIO="${RATIO%%:*}"
-H_RATIO="${RATIO##*:}"
+# ==========================================
+# Lấy kích thước video gốc
+# ==========================================
 
-if [ "$W_RATIO" -eq 0 ] || [ "$H_RATIO" -eq 0 ]; then
-    echo "❌ Tỷ lệ không hợp lệ."
-    exit 1
-fi
-
-echo
-echo "════════════════════════════════"
-echo "⚙️ Chế độ xử lý"
-echo "════════════════════════════════"
-echo
-echo "Video sẽ được giữ nguyên toàn bộ."
-echo "Phần thừa sẽ được thêm nền đen."
-echo
-echo "Không crop."
-echo "Không kéo giãn."
-echo
-
-# Lấy kích thước video
-WIDTH=$(ffprobe -v error \
+WIDTH=$(ffprobe \
+    -v error \
     -select_streams v:0 \
     -show_entries stream=width \
-    -of csv=p=0 "$INPUT")
+    -of default=noprint_wrappers=1:nokey=1 \
+    "$INPUT")
 
-HEIGHT=$(ffprobe -v error \
+HEIGHT=$(ffprobe \
+    -v error \
     -select_streams v:0 \
     -show_entries stream=height \
-    -of csv=p=0 "$INPUT")
+    -of default=noprint_wrappers=1:nokey=1 \
+    "$INPUT")
 
-if [ -z "$WIDTH" ] || [ -z "$HEIGHT" ]; then
+if ! [[ "$WIDTH" =~ ^[0-9]+$ ]] || ! [[ "$HEIGHT" =~ ^[0-9]+$ ]]; then
     echo "❌ Không đọc được kích thước video."
     exit 1
 fi
 
-echo "📐 Video gốc: ${WIDTH}x${HEIGHT}"
-echo "🎞️ Tỷ lệ mới: $RATIO"
-echo
-
-# Tính canvas mới.
-# Giữ video lớn nhất có thể nhưng không crop.
-TARGET_W="$WIDTH"
-TARGET_H="$HEIGHT"
-
-# So sánh WIDTH/HEIGHT với W_RATIO/H_RATIO
-# Dùng số nguyên để tránh cần bc.
-
-LEFT=$((WIDTH * H_RATIO))
-RIGHT=$((HEIGHT * W_RATIO))
-
-if [ "$LEFT" -gt "$RIGHT" ]; then
-    # Video rộng hơn tỷ lệ đích
-    # Giữ chiều rộng, tăng chiều cao
-    TARGET_H=$((WIDTH * H_RATIO / W_RATIO))
-else
-    # Video cao hơn tỷ lệ đích
-    # Giữ chiều cao, tăng chiều rộng
-    TARGET_W=$((HEIGHT * W_RATIO / H_RATIO))
-fi
-
-# Đảm bảo kích thước là số chẵn
-TARGET_W=$((TARGET_W / 2 * 2))
-TARGET_H=$((TARGET_H / 2 * 2))
-
-echo "🖼️ Canvas mới: ${TARGET_W}x${TARGET_H}"
-echo
-
-OUTPUT="$OUTPUT_DIR/${NAME}_${W_RATIO}x${H_RATIO}.mp4"
-
-echo "🚀 Đang xử lý..."
-echo
-echo "📂 File xuất:"
-echo "$OUTPUT"
-echo
-
-ffmpeg \
--hide_banner \
--i "$INPUT" \
--map 0:v:0 \
--map 0:a? \
--vf "scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease,pad=${TARGET_W}:${TARGET_H}:(ow-iw)/2:(oh-ih)/2:black" \
--c:v libx264 \
--preset veryfast \
--crf 23 \
--pix_fmt yuv420p \
--c:a aac \
--b:a 128k \
--movflags +faststart \
--progress pipe:1 \
--n "$OUTPUT" 2>/dev/null |
-while IFS='=' read -r key value; do
-    if [ "$key" = "out_time_ms" ]; then
-        printf "\r⏳ Đang xuất: %s giây" "$((value / 1000000))"
-    fi
-
-    if [ "$key" = "progress" ] && [ "$value" = "end" ]; then
-        echo
-    fi
-done
-
-if [ $? -eq 0 ] && [ -f "$OUTPUT" ]; then
-    echo
-    echo "╔════════════════════════════════╗"
-    echo "║        ✅ HOÀN THÀNH          ║"
-    echo "╚════════════════════════════════╝"
-    echo
-    echo "📁 File nằm tại:"
-    echo "$OUTPUT"
-    echo
-else
-    echo
-    echo "❌ Có lỗi khi xuất video."
+if [ "$WIDTH" -le 0 ] || [ "$HEIGHT" -le 0 ]; then
+    echo "❌ Kích thước video không hợp lệ."
     exit 1
 fi
+
+# ==========================================
+# Tính canvas mới
+#
+# QUAN TRỌNG:
+# Không thay đổi kích thước video gốc.
+# Chỉ mở rộng canvas và thêm nền đen.
+# ==========================================
+
+LEFT=$((WIDTH * RATIO_H))
+RIGHT=$((HEIGHT * RATIO_W))
+
+if [ "$LEFT" -gt "$RIGHT" ]; then
+
+    # Video rộng hơn tỷ lệ cần tạo
+    # GIỮ NGUYÊN WIDTH
+    # Tăng HEIGHT bằng nền đen
+
+    TARGET_W="$WIDTH"
+
+    TARGET_H=$((WIDTH * RATIO_H / RATIO_W))
+
+else
+
+    # Video cao hơn tỷ lệ cần tạo
+    # GIỮ NGUYÊN HEIGHT
+    # Tăng WIDTH bằng nền đen
+
+    TARGET_H="$HEIGHT"
+
+    TARGET_W=$((HEIGHT * RATIO_W / RATIO_H))
+
+fi
+
+# ==========================================
+# Đảm bảo canvas là số chẵn
+# ==========================================
+
+if [ $((TARGET_W % 2)) -ne 0 ]; then
+    TARGET_W=$((TARGET_W + 1))
+fi
+
+if [ $((TARGET_H % 2)) -ne 0 ]; then
+    TARGET_H=$((TARGET_H + 1))
+fi
+
+# ==========================================
+# Thông tin
+# ==========================================
+
+echo
+echo "════════════════════════════════════"
+echo "             THÔNG TIN"
+echo "════════════════════════════════════"
+echo
+
+echo "📐 Video gốc:"
+echo "   ${WIDTH}x${HEIGHT}"
+
+echo
+echo "🎞️ Tỷ lệ mới:"
+echo "   ${RATIO_W}:${RATIO_H}"
+
+echo
+echo "🖼️ Canvas:"
+echo "   ${TARGET_W}x${TARGET_H}"
+
+echo
+echo "🔒 Video gốc:"
+echo "   GIỮ NGUYÊN KÍCH THƯỚC"
+
+echo
+echo "✂️ Crop:"
+echo "   KHÔNG"
+
+echo
+echo "🔍 Upscale:"
+echo "   KHÔNG"
+
+echo
+echo "⬛ Phần thừa:"
+echo "   NỀN ĐEN"
+
+echo
+
+# ==========================================
+# File output
+# ==========================================
+
+OUTPUT="$OUTPUT_DIR/${NAME}_${RATIO_NAME}.mp4"
+
+echo "📂 File xuất:"
+echo "$OUTPUT"
+
+echo
+echo "════════════════════════════════════"
+echo "🚀 BẮT ĐẦU XỬ LÝ"
+echo "════════════════════════════════════"
+echo
+
+# ==========================================
+# FFmpeg
+#
+# pad:
+# - Không resize video
+# - Không crop
+# - Không stretch
+# - Chỉ thêm canvas màu đen
+#
+# CRF 18:
+# Chất lượng rất cao
+#
+# veryfast:
+# Ưu tiên tốc độ
+# ==========================================
+
+ffmpeg \
+    -hide_banner \
+    -i "$INPUT" \
+    -map 0:v:0 \
+    -map 0:a? \
+    -vf "pad=${TARGET_W}:${TARGET_H}:(ow-iw)/2:(oh-ih)/2:black" \
+    -c:v libx264 \
+    -preset veryfast \
+    -crf 18 \
+    -pix_fmt yuv420p \
+    -c:a aac \
+    -b:a 192k \
+    -movflags +faststart \
+    -y \
+    "$OUTPUT"
+
+FFMPEG_STATUS=$?
+
+echo
+
+# ==========================================
+# Kiểm tra kết quả
+# ==========================================
+
+if [ "$FFMPEG_STATUS" -eq 0 ] && [ -f "$OUTPUT" ]; then
+
+    echo "╔════════════════════════════════════╗"
+    echo "║          ✅ HOÀN THÀNH            ║"
+    echo "╚════════════════════════════════════╝"
+    echo
+
+    echo "📁 File:"
+    echo "$OUTPUT"
+
+    echo
+    echo "📐 Kích thước canvas:"
+    echo "${TARGET_W}x${TARGET_H}"
+
+    echo
+    echo "🎞️ Tỷ lệ:"
+    echo "${RATIO_W}:${RATIO_H}"
+
+    echo
+    echo "⬛ Video gốc không bị crop."
+    echo "⬛ Không upscale video."
+
+else
+
+    echo "╔════════════════════════════════════╗"
+    echo "║            ❌ THẤT BẠI            ║"
+    echo "╚════════════════════════════════════╝"
+    echo
+
+    echo "FFmpeg đã trả về lỗi."
+    echo "Mã lỗi: $FFMPEG_STATUS"
+
+    exit 1
+
+fi
+
+echo
+echo "📂 Thư mục:"
+echo "/sdcard/Download/Video Ratio"
+echo
